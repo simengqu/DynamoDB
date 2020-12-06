@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"time"
 )
 
 type DynamoServer struct {
@@ -14,7 +15,8 @@ type DynamoServer struct {
 	preferenceList []DynamoNode //Ordered list of other Dynamo nodes to perform operations o
 	selfNode       DynamoNode   //This node's address and port info
 	nodeID         string       //ID of this node
-
+	localStore     map[string]PutArgs
+	gossipList     []string
 }
 
 func (s *DynamoServer) SendPreferenceList(incomingList []DynamoNode, _ *Empty) error {
@@ -30,17 +32,66 @@ func (s *DynamoServer) Gossip(_ Empty, _ *Empty) error {
 
 //Makes server unavailable for some seconds
 func (s *DynamoServer) Crash(seconds int, success *bool) error {
-	panic("todo")
+	// panic("todo")
+	time.Sleep(time.Duration(seconds) * time.Second)
+	return nil
 }
 
 // Put a file to this server and W other servers
 func (s *DynamoServer) Put(value PutArgs, result *bool) error {
-	panic("todo")
+	// panic("todo")
+	// if value.Context.Clock[s.nodeID] >
+	if _, ok := s.localStore[value.Key]; !ok {
+		s.localStore[value.Key] = value
+	} else if s.localStore[value.Key].Context.Clock.LessThan(value.Context.Clock) {
+		*result = false
+	} else {
+		s.localStore[value.Key] = value
+		s.localStore[value.Key].Context.Clock.Clock[value.Key] += 1
+
+		for i := 0; i < s.wValue-1; i++ {
+			conn, e := rpc.DialHTTP("tcp", s.preferenceList[i].Address)
+			if e != nil {
+				return e
+			}
+
+			// perform the call
+			e = conn.Call("RPCClient.Put", value, result)
+			if e != nil {
+				conn.Close()
+				return e
+			}
+			defer conn.Close()
+		}
+		*result = true
+	}
+	return nil
 }
 
 //Get a file from this server, matched with R other servers
 func (s *DynamoServer) Get(key string, result *DynamoResult) error {
-	panic("todo")
+	// panic("todo")
+	objectEntry := ObjectEntry{
+		Context: s.localStore[key].Context,
+		Value:   s.localStore[key].Value,
+	}
+	result.EntryList = append(result.EntryList, objectEntry)
+
+	for i := 0; i < s.rValue-1; i++ {
+		conn, e := rpc.DialHTTP("tcp", s.preferenceList[i].Address)
+		if e != nil {
+			return e
+		}
+
+		// perform the call
+		e = conn.Call("RPCClient.Get", key, result)
+		if e != nil {
+			conn.Close()
+			return e
+		}
+		defer conn.Close()
+	}
+	return nil
 }
 
 /* Belows are functions that implement server boot up and initialization */
@@ -56,6 +107,7 @@ func NewDynamoServer(w int, r int, hostAddr string, hostPort string, id string) 
 		preferenceList: preferenceList,
 		selfNode:       selfNodeInfo,
 		nodeID:         id,
+		localStore:     map[string]PutArgs{},
 	}
 }
 
