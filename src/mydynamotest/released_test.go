@@ -216,7 +216,7 @@ func TestInvalidPut(t *testing.T) {
 	}
 }
 
-func TestGossipW2(t *testing.T) {
+func Test2GossipW2(t *testing.T) {
 	t.Logf("Starting GossipW2 test")
 	cmd := InitDynamoServer("./twoserver.ini")
 	ready := make(chan bool)

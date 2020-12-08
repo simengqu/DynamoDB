@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"sync"
 	"time"
 )
 
@@ -78,6 +79,7 @@ func (s *DynamoServer) ServerCrash(seconds int, success *bool) error {
 // Put a file to this server and W other servers
 func (s *DynamoServer) Put(value PutArgs, result *bool) error {
 	// panic("todo")
+	var m sync.Mutex
 	if !s.crashed {
 		fmt.Println("Put...", s.localStore)
 		if _, ok := s.localStore[value.Key]; !ok {
@@ -95,8 +97,10 @@ func (s *DynamoServer) Put(value PutArgs, result *bool) error {
 			*result = false
 		} else if s.localStore[value.Key][0].Context.Clock.Concurrent(value.Context.Clock) {
 			fmt.Println("Put exit, putting...", s.nodeID, value)
+			m.Lock()
 			s.localStore[value.Key] = append(s.localStore[value.Key], value)
 			s.localStore[value.Key][len(s.localStore[value.Key])-1].Context.Clock.Clock[value.Key]++
+			m.Unlock()
 		}
 	} else {
 		return errors.New("Server " + s.selfNode.Port + " is crashed...")
@@ -118,7 +122,9 @@ func (s *DynamoServer) Put(value PutArgs, result *bool) error {
 				conn.Close()
 				return e
 			}
+			m.Lock()
 			s.gossipList[s.preferenceList[i].Port] = append(s.gossipList[s.preferenceList[i].Port], value)
+			m.Unlock()
 			defer conn.Close()
 		} else {
 			wNode++
@@ -139,6 +145,7 @@ func (s *DynamoServer) Put(value PutArgs, result *bool) error {
 
 // server to server Put
 func (s *DynamoServer) ServerPut(value PutArgs, result *bool) error {
+	var m sync.Mutex
 	if !s.crashed {
 		fmt.Println("ServerPut...", s.localStore)
 		if _, ok := s.localStore[value.Key]; !ok {
@@ -156,8 +163,10 @@ func (s *DynamoServer) ServerPut(value PutArgs, result *bool) error {
 			*result = false
 		} else if s.localStore[value.Key][0].Context.Clock.Concurrent(value.Context.Clock) {
 			fmt.Println("ServerPut exit, putting...", s.nodeID, value)
+			m.Lock()
 			s.localStore[value.Key] = append(s.localStore[value.Key], value)
 			s.localStore[value.Key][len(s.localStore[value.Key])-1].Context.Clock.Clock[value.Key]++
+			m.Unlock()
 		}
 	} else {
 		return errors.New("Server " + s.selfNode.Port + " is crashed...")
@@ -169,6 +178,7 @@ func (s *DynamoServer) ServerPut(value PutArgs, result *bool) error {
 //Get a file from this server, matched with R other servers
 func (s *DynamoServer) Get(key string, result *DynamoResult) error {
 	// panic("todo")
+	var m sync.Mutex
 	if !s.crashed {
 		if _, ok := s.localStore[key]; ok {
 			for i := 0; i < len(s.localStore[key]); i++ {
@@ -177,7 +187,9 @@ func (s *DynamoServer) Get(key string, result *DynamoResult) error {
 					Context: s.localStore[key][i].Context,
 					Value:   s.localStore[key][i].Value,
 				}
+				m.Lock()
 				result.EntryList = append(result.EntryList, objectEntry)
+				m.Unlock()
 			}
 
 		}
@@ -209,6 +221,7 @@ func (s *DynamoServer) Get(key string, result *DynamoResult) error {
 
 //Get a file from this server, matched with R other servers
 func (s *DynamoServer) ServerGet(key string, result *DynamoResult) error {
+	var m sync.Mutex
 	if !s.crashed {
 		if _, ok := s.localStore[key]; ok {
 			for i := 0; i < len(s.localStore[key]); i++ {
@@ -217,7 +230,9 @@ func (s *DynamoServer) ServerGet(key string, result *DynamoResult) error {
 					Context: s.localStore[key][i].Context,
 					Value:   s.localStore[key][i].Value,
 				}
+				m.Lock()
 				result.EntryList = append(result.EntryList, objectEntry)
+				m.Unlock()
 			}
 		}
 	} else {
