@@ -2,6 +2,7 @@ package mydynamo
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -57,51 +58,56 @@ func (s *DynamoServer) Gossip(_ Empty, _ *Empty) error {
 //Makes server unavailable for some seconds
 func (s *DynamoServer) Crash(seconds int, success *bool) error {
 	// panic("todo")
-	// *success = false
-	go s.ServerCrash(success)
+	*success = false
+	go s.ServerCrash(seconds, success)
 	time.Sleep(time.Duration(seconds) * time.Second)
 	*success = true
+	// for time.Now().Before(time.Now().Add(time.Duration(seconds) * time.Second)) {
+	// 	s.ServerCrash(seconds, success)
+	// }
 	return nil
 }
 
-func (s *DynamoServer) ServerCrash(success *bool) {
+func (s *DynamoServer) ServerCrash(seconds int, success *bool) error {
 	// panic("todo")
 	*success = false
+	// fmt.Print("server is crashed")
+	return errors.New("server is crashed")
 }
 
 // Put a file to this server and W other servers
 func (s *DynamoServer) Put(value PutArgs, result *bool) error {
 	// panic("todo")
 	if !s.crashed {
-		// fmt.Println("Put...", s.localStore)
+		fmt.Println("Put...", s.localStore)
 		if _, ok := s.localStore[value.Key]; !ok {
-			// fmt.Println("Put not exit, putting...", s.nodeID, value)
+			fmt.Println("Put not exit, putting...", s.nodeID, value)
 			s.localStore[value.Key] = []PutArgs{value}
 			// s.localStore[value.Key][0] = value
 			s.localStore[value.Key][0].Context.Clock.Clock[value.Key]++
 		} else if s.localStore[value.Key][0].Context.Clock.LessThan(value.Context.Clock) {
-			// fmt.Println("Put lessthan, putting...", s.nodeID, value.Value, value.Context.Clock, s.localStore[value.Key][0].Context.Clock)
+			fmt.Println("Put lessthan, putting...", s.nodeID, value.Value, value.Context.Clock, s.localStore[value.Key][0].Context.Clock)
 			s.localStore[value.Key] = []PutArgs{value}
 			s.localStore[value.Key][0].Context.Clock.Clock[value.Key]++
 
 		} else if value.Context.Clock.LessThan(s.localStore[value.Key][0].Context.Clock) {
-			// fmt.Println("Put not desendent...", s.nodeID, value)
+			fmt.Println("Put not desendent...", s.nodeID, value)
 			*result = false
 		} else if s.localStore[value.Key][0].Context.Clock.Concurrent(value.Context.Clock) {
-			// fmt.Println("Put exit, putting...", s.nodeID, value)
+			fmt.Println("Put exit, putting...", s.nodeID, value)
 			s.localStore[value.Key] = append(s.localStore[value.Key], value)
 			s.localStore[value.Key][len(s.localStore[value.Key])-1].Context.Clock.Clock[value.Key]++
 		}
 	} else {
 		return errors.New("Server " + s.selfNode.Port + " is crashed...")
 	}
-	// fmt.Println("Preference list...", s.nodeID, s.selfNode.Port, s.preferenceList)
+	fmt.Println("Preference list...", s.nodeID, s.selfNode.Port, s.preferenceList)
 	// fmt.Println("exist, putting...", value.Key)
 	// s.localStore[value.Key] = value
 
 	wNode := s.wValue - 1
 	for i := 0; i < wNode; i++ {
-		// fmt.Println("Put rpc...", i, s.preferenceList[i].Port)
+		fmt.Println("Put rpc...", i, s.preferenceList[i].Port)
 		if s.preferenceList[i].Port != s.selfNode.Port {
 			conn, e := rpc.DialHTTP("tcp", s.preferenceList[i].Address+":"+s.preferenceList[i].Port)
 			if e != nil {
@@ -134,22 +140,22 @@ func (s *DynamoServer) Put(value PutArgs, result *bool) error {
 // server to server Put
 func (s *DynamoServer) ServerPut(value PutArgs, result *bool) error {
 	if !s.crashed {
-		// fmt.Println("ServerPut...", s.localStore)
+		fmt.Println("ServerPut...", s.localStore)
 		if _, ok := s.localStore[value.Key]; !ok {
-			// fmt.Println("ServerPut not exit, putting...", s.nodeID, value)
+			fmt.Println("ServerPut not exit, putting...", s.nodeID, value)
 			s.localStore[value.Key] = []PutArgs{value}
 			s.localStore[value.Key][0].Context.Clock.Clock[value.Key]++
 		} else if s.localStore[value.Key][0].Context.Clock.LessThan(value.Context.Clock) {
-			// fmt.Println("ServerPut lessthan, putting...", s.nodeID, value.Value, value.Context.Clock, s.localStore[value.Key][0].Context.Clock)
+			fmt.Println("ServerPut lessthan, putting...", s.nodeID, value.Value, value.Context.Clock, s.localStore[value.Key][0].Context.Clock)
 			s.localStore[value.Key] = []PutArgs{value}
 			// s.localStore[value.Key][0] = value
 			s.localStore[value.Key][0].Context.Clock.Clock[value.Key]++
 
 		} else if value.Context.Clock.LessThan(s.localStore[value.Key][0].Context.Clock) {
-			// fmt.Println("ServerPut not desendent...", s.nodeID, value)
+			fmt.Println("ServerPut not desendent...", s.nodeID, value)
 			*result = false
 		} else if s.localStore[value.Key][0].Context.Clock.Concurrent(value.Context.Clock) {
-			// fmt.Println("ServerPut exit, putting...", s.nodeID, value)
+			fmt.Println("ServerPut exit, putting...", s.nodeID, value)
 			s.localStore[value.Key] = append(s.localStore[value.Key], value)
 			s.localStore[value.Key][len(s.localStore[value.Key])-1].Context.Clock.Clock[value.Key]++
 		}
@@ -166,7 +172,7 @@ func (s *DynamoServer) Get(key string, result *DynamoResult) error {
 	if !s.crashed {
 		if _, ok := s.localStore[key]; ok {
 			for i := 0; i < len(s.localStore[key]); i++ {
-				// fmt.Println("Get ok...", s.localStore[key][i].Value)
+				fmt.Println("Get ok...", s.localStore[key][i].Value)
 				objectEntry := ObjectEntry{
 					Context: s.localStore[key][i].Context,
 					Value:   s.localStore[key][i].Value,
@@ -206,7 +212,7 @@ func (s *DynamoServer) ServerGet(key string, result *DynamoResult) error {
 	if !s.crashed {
 		if _, ok := s.localStore[key]; ok {
 			for i := 0; i < len(s.localStore[key]); i++ {
-				// fmt.Println("ServerGet ok...", s.localStore[key][i].Value)
+				fmt.Println("ServerGet ok...", s.localStore[key][i].Value)
 				objectEntry := ObjectEntry{
 					Context: s.localStore[key][i].Context,
 					Value:   s.localStore[key][i].Value,
