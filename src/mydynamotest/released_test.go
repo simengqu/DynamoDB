@@ -210,9 +210,150 @@ func TestInvalidPut(t *testing.T) {
 	clientInstance.Put(PutFreshContext("s1", []byte("abcde")))
 	clientInstance.Put(PutFreshContext("s1", []byte("efghi")))
 	gotValue := clientInstance.Get("s1")
-	t.Log(string(gotValue.EntryList[0].Value))
 	if len(gotValue.EntryList) != 1 || !valuesEqual(gotValue.EntryList[0].Value, []byte("abcde")) {
 		t.Fail()
 		t.Logf("TestInvalidPut: Got wrong value")
+	}
+}
+
+func TestGossipW2(t *testing.T) {
+	t.Logf("Starting GossipW2 test")
+	cmd := InitDynamoServer("./twoserver.ini")
+	ready := make(chan bool)
+	go StartDynamoServer(cmd, ready)
+	defer KillDynamoServer(cmd)
+
+	time.Sleep(3 * time.Second)
+	<-ready
+
+	clientInstance0 := MakeConnectedClient(8080)
+	clientInstance1 := MakeConnectedClient(8081)
+	clientInstance0.Put(PutFreshContext("s1", []byte("abcde")))
+	clientInstance0.Gossip()
+	gotValuePtr := clientInstance1.Get("s1")
+	if gotValuePtr == nil {
+		t.Fail()
+		t.Logf("TestGossipW2: Failed to get first element")
+	}
+	gotValue := *gotValuePtr
+	if len(gotValue.EntryList) != 1 || !valuesEqual(gotValue.EntryList[0].Value, []byte("abcde")) {
+		t.Fail()
+		t.Logf("TestGossipW2: Failed to get value")
+	}
+	clientInstance1.Put(mydynamo.NewPutArgs("s1", gotValue.EntryList[0].Context, []byte("efghi")))
+
+	gotValuePtr = clientInstance1.Get("s1")
+	if gotValuePtr == nil {
+		t.Fail()
+		t.Logf("TestGossipW2: Failed to get")
+	}
+	gotValue = *gotValuePtr
+
+	if len(gotValue.EntryList) != 1 || !valuesEqual(gotValue.EntryList[0].Value, []byte("efghi")) {
+		t.Fail()
+		t.Logf("GossipW2: Failed to get value")
+	}
+	gotValuePtr = clientInstance0.Get("s1")
+	if gotValuePtr == nil {
+		t.Fail()
+		t.Logf("TestGossipW2: Failed to get")
+	}
+	gotValue = *gotValuePtr
+
+	if (len(gotValue.EntryList) != 1) || !valuesEqual(gotValue.EntryList[0].Value, []byte("efghi")) {
+		t.Fail()
+		t.Logf("GossipW2: Failed to get value")
+	}
+
+}
+
+func TestReplaceMultipleVersions(t *testing.T) {
+	t.Logf("Starting ReplaceMultipleVersions test")
+	cmd := InitDynamoServer("./myconfig.ini")
+	ready := make(chan bool)
+	go StartDynamoServer(cmd, ready)
+	defer KillDynamoServer(cmd)
+
+	time.Sleep(3 * time.Second)
+	<-ready
+
+	clientInstance0 := MakeConnectedClient(8080)
+	clientInstance1 := MakeConnectedClient(8081)
+	clientInstance0.Put(PutFreshContext("s1", []byte("abcde")))
+	clientInstance1.Put(PutFreshContext("s1", []byte("efghi")))
+	clientInstance0.Gossip()
+	gotValuePtr := clientInstance1.Get("s1")
+	if gotValuePtr == nil {
+		t.Fail()
+		t.Logf("TestReplaceMultipleVersions: Failed to get")
+	}
+
+	gotValue := *gotValuePtr
+	clockList := make([]mydynamo.VectorClock, 0)
+	for _, a := range gotValue.EntryList {
+		clockList = append(clockList, a.Context.Clock)
+	}
+	clockList[0].Combine(clockList)
+	combinedClock := clockList[0]
+	combinedContext := mydynamo.Context{
+		Clock: combinedClock,
+	}
+	clientInstance1.Put(mydynamo.NewPutArgs("s1", combinedContext, []byte("zxyw")))
+	gotValuePtr = nil
+	gotValuePtr = clientInstance1.Get("s1")
+	if gotValuePtr == nil {
+		t.Fail()
+		t.Logf("TestReplaceMultipleVersions: Failed to get")
+	}
+
+	gotValue = *gotValuePtr
+	if len(gotValue.EntryList) != 1 || !valuesEqual(gotValue.EntryList[0].Value, []byte("zxyw")) {
+		t.Fail()
+		t.Logf("testReplaceMultipleVersions: Values don't match")
+	}
+
+}
+
+func TestConsistent(t *testing.T) {
+	t.Logf("Starting Consistent test")
+	cmd := InitDynamoServer("./consistent.ini")
+	ready := make(chan bool)
+	go StartDynamoServer(cmd, ready)
+	defer KillDynamoServer(cmd)
+
+	time.Sleep(3 * time.Second)
+	<-ready
+
+	clientInstance0 := MakeConnectedClient(8080)
+	clientInstance1 := MakeConnectedClient(8081)
+	clientInstance2 := MakeConnectedClient(8082)
+	clientInstance3 := MakeConnectedClient(8083)
+	clientInstance4 := MakeConnectedClient(8084)
+
+	clientInstance0.Put(PutFreshContext("s1", []byte("abcde")))
+	gotValuePtr := clientInstance1.Get("s1")
+	if gotValuePtr == nil {
+		t.Fail()
+		t.Logf("TestConsistent: Failed to get")
+	}
+	gotValue := *gotValuePtr
+	if len(gotValue.EntryList) != 1 || !valuesEqual(gotValue.EntryList[0].Value, []byte("abcde")) {
+		t.Fail()
+		t.Logf("TestConsistent: Failed to get value")
+	}
+
+	clientInstance3.Put(mydynamo.NewPutArgs("s1", gotValue.EntryList[0].Context, []byte("zyxw")))
+	clientInstance0.Crash(3)
+	clientInstance1.Crash(3)
+	clientInstance4.Crash(3)
+	gotValuePtr = clientInstance2.Get("s1")
+	if gotValuePtr == nil {
+		t.Fail()
+		t.Logf("TestConsistent: Failed to get")
+	}
+	gotValue = *gotValuePtr
+	if len(gotValue.EntryList) != 1 || !valuesEqual(gotValue.EntryList[0].Value, []byte("zyxw")) {
+		t.Fail()
+		t.Logf("TestConsistent: Failed to get value")
 	}
 }
