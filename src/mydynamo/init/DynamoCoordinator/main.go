@@ -76,9 +76,9 @@ func main() {
 
 	//Create a duplicate of dynamoNodeList that we can rotate
 	//so that each node has a distinct preference list
+	time.Sleep(1 * time.Second)
 	nodePreferenceList := dynamoNodeList
 
-	time.Sleep(2 * time.Second)
 	//Send the preference list to all servers
 	for _, info := range dynamoNodeList {
 		var empty mydynamo.Empty
