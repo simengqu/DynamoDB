@@ -42,7 +42,7 @@ func (s *DynamoServer) Gossip(_ Empty, _ *Empty) error {
 						return e
 					}
 					result := new(bool)
-					e = conn.Call("MyDynamo.ServerPut", s.localStore[s.preferenceList[i].Port][j], result)
+					e = conn.Call("MyDynamo.GossipPut", s.localStore[s.preferenceList[i].Port][j], result)
 					if e != nil {
 						conn.Close()
 						return e
@@ -166,6 +166,28 @@ func (s *DynamoServer) ServerPut(value PutArgs, result *bool) error {
 			m.Lock()
 			s.localStore[value.Key] = append(s.localStore[value.Key], value)
 			s.localStore[value.Key][len(s.localStore[value.Key])-1].Context.Clock.Clock[value.Key]++
+			m.Unlock()
+		}
+	} else {
+		return errors.New("Server " + s.selfNode.Port + " is crashed...")
+	}
+
+	return nil
+}
+
+func (s *DynamoServer) GossipPut(value PutArgs, result *bool) error {
+	var m sync.Mutex
+	if !s.crashed {
+		fmt.Println("GossipPut...", s.localStore)
+		if _, ok := s.localStore[value.Key]; !ok {
+			fmt.Println("GossipPut not exit, putting...", s.nodeID, value)
+			s.localStore[value.Key] = []PutArgs{value}
+			// s.localStore[value.Key][0].Context.Clock.Clock[value.Key]++
+		} else {
+			fmt.Println("GossipPut exit, putting...", s.nodeID, value)
+			m.Lock()
+			s.localStore[value.Key] = append(s.localStore[value.Key], value)
+			// s.localStore[value.Key][len(s.localStore[value.Key])-1].Context.Clock.Clock[value.Key]++
 			m.Unlock()
 		}
 	} else {
