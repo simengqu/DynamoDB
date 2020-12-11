@@ -32,6 +32,7 @@ func (s *DynamoServer) SendPreferenceList(incomingList []DynamoNode, _ *Empty) e
 // As this method takes no arguments, we must use the Empty placeholder
 func (s *DynamoServer) Gossip(_ Empty, _ *Empty) error {
 	// panic("todo")
+	log.Println(len(s.preferenceList))
 	for i := 0; i < len(s.preferenceList); i++ {
 		if s.preferenceList[i].Port != s.selfNode.Port {
 
@@ -59,13 +60,19 @@ func (s *DynamoServer) Gossip(_ Empty, _ *Empty) error {
 //Makes server unavailable for some seconds
 func (s *DynamoServer) Crash(seconds int, success *bool) error {
 	// panic("todo")
-	*success = false
-	go s.ServerCrash(seconds, success)
-	time.Sleep(time.Duration(seconds) * time.Second)
-	*success = true
-	// for time.Now().Before(time.Now().Add(time.Duration(seconds) * time.Second)) {
-	// 	s.ServerCrash(seconds, success)
-	// }
+	// *success = false
+	// go s.ServerCrash(seconds, success)
+	// time.Sleep(time.Duration(seconds) * time.Second)
+	// *success = true
+	if s.crashed {
+		return errors.New("Server " + s.selfNode.Port + " is already crashed.")
+	}
+
+	go func(sec int) {
+		s.crashed = true
+		time.Sleep(time.Duration(seconds) * time.Second)
+		s.crashed = false
+	}(seconds)
 	return nil
 }
 
@@ -79,24 +86,25 @@ func (s *DynamoServer) ServerCrash(seconds int, success *bool) error {
 // Put a file to this server and W other servers
 func (s *DynamoServer) Put(value PutArgs, result *bool) error {
 	// panic("todo")
+	log.Println(len(s.preferenceList))
 	var m sync.Mutex
 	if !s.crashed {
 		fmt.Println("Put...", s.localStore)
 		if _, ok := s.localStore[value.Key]; !ok {
-			fmt.Println("Put not exit, putting...", s.nodeID, value)
+			// fmt.Println("Put not exit, putting...", s.nodeID, value)
 			s.localStore[value.Key] = []PutArgs{value}
 			// s.localStore[value.Key][0] = value
 			s.localStore[value.Key][0].Context.Clock.Clock[value.Key]++
 		} else if s.localStore[value.Key][0].Context.Clock.LessThan(value.Context.Clock) {
-			fmt.Println("Put lessthan, putting...", s.nodeID, value.Value, value.Context.Clock, s.localStore[value.Key][0].Context.Clock)
+			// fmt.Println("Put lessthan, putting...", s.nodeID, value.Value, value.Context.Clock, s.localStore[value.Key][0].Context.Clock)
 			s.localStore[value.Key] = []PutArgs{value}
 			s.localStore[value.Key][0].Context.Clock.Clock[value.Key]++
 
 		} else if value.Context.Clock.LessThan(s.localStore[value.Key][0].Context.Clock) {
-			fmt.Println("Put not desendent...", s.nodeID, value)
+			// fmt.Println("Put not desendent...", s.nodeID, value)
 			*result = false
 		} else if s.localStore[value.Key][0].Context.Clock.Concurrent(value.Context.Clock) {
-			fmt.Println("Put exit, putting...", s.nodeID, value)
+			// fmt.Println("Put exit, putting...", s.nodeID, value)
 			m.Lock()
 			s.localStore[value.Key] = append(s.localStore[value.Key], value)
 			s.localStore[value.Key][len(s.localStore[value.Key])-1].Context.Clock.Clock[value.Key]++
@@ -145,15 +153,16 @@ func (s *DynamoServer) Put(value PutArgs, result *bool) error {
 
 // server to server Put
 func (s *DynamoServer) ServerPut(value PutArgs, result *bool) error {
+	log.Println(len(s.preferenceList))
 	var m sync.Mutex
 	if !s.crashed {
 		fmt.Println("ServerPut...", s.localStore)
 		if _, ok := s.localStore[value.Key]; !ok {
-			fmt.Println("ServerPut not exit, putting...", s.nodeID, value)
+			// fmt.Println("ServerPut not exit, putting...", s.nodeID, value)
 			s.localStore[value.Key] = []PutArgs{value}
 			s.localStore[value.Key][0].Context.Clock.Clock[value.Key]++
 		} else if s.localStore[value.Key][0].Context.Clock.LessThan(value.Context.Clock) {
-			fmt.Println("ServerPut lessthan, putting...", s.nodeID, value.Value, value.Context.Clock, s.localStore[value.Key][0].Context.Clock)
+			// fmt.Println("ServerPut lessthan, putting...", s.nodeID, value.Value, value.Context.Clock, s.localStore[value.Key][0].Context.Clock)
 			s.localStore[value.Key] = []PutArgs{value}
 			// s.localStore[value.Key][0] = value
 			s.localStore[value.Key][0].Context.Clock.Clock[value.Key]++
@@ -176,15 +185,16 @@ func (s *DynamoServer) ServerPut(value PutArgs, result *bool) error {
 }
 
 func (s *DynamoServer) GossipPut(value PutArgs, result *bool) error {
+	log.Println(len(s.preferenceList))
 	var m sync.Mutex
 	if !s.crashed {
 		fmt.Println("GossipPut...", s.localStore)
 		if _, ok := s.localStore[value.Key]; !ok {
-			fmt.Println("GossipPut not exit, putting...", s.nodeID, value)
+			// fmt.Println("GossipPut not exit, putting...", s.nodeID, value)
 			s.localStore[value.Key] = []PutArgs{value}
 			// s.localStore[value.Key][0].Context.Clock.Clock[value.Key]++
 		} else {
-			fmt.Println("GossipPut exit, putting...", s.nodeID, value)
+			// fmt.Println("GossipPut exit, putting...", s.nodeID, value)
 			m.Lock()
 			s.localStore[value.Key] = append(s.localStore[value.Key], value)
 			// s.localStore[value.Key][len(s.localStore[value.Key])-1].Context.Clock.Clock[value.Key]++

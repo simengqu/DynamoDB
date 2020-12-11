@@ -66,7 +66,7 @@ func TestMultipleKeys(t *testing.T) {
 	go StartDynamoServer(cmd, ready)
 	defer KillDynamoServer(cmd)
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 	<-ready
 
 	clientInstance0 := MakeConnectedClient(8080)
