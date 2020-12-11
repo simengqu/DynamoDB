@@ -61,24 +61,27 @@ func (s *DynamoServer) Gossip(_ Empty, _ *Empty) error {
 func (s *DynamoServer) Crash(seconds int, success *bool) error {
 	// panic("todo")
 	// *success = false
-	// go s.ServerCrash(seconds, success)
-	// time.Sleep(time.Duration(seconds) * time.Second)
-	// *success = true
 	if s.crashed {
 		return errors.New("Server " + s.selfNode.Port + " is already crashed.")
 	}
+	s.crashed = true
+	go s.ServerCrash(seconds, success)
+	s.crashed = false
+	// time.Sleep(time.Duration(seconds) * time.Second)
+	// *success = true
 
-	go func(sec int) {
-		s.crashed = true
-		time.Sleep(time.Duration(seconds) * time.Second)
-		s.crashed = false
-	}(seconds)
+	// go func(sec int) {
+	// 	s.crashed = true
+	// 	time.Sleep(time.Duration(seconds) * time.Second)
+	// 	s.crashed = false
+	// }(seconds)
 	return nil
 }
 
 func (s *DynamoServer) ServerCrash(seconds int, success *bool) error {
 	// panic("todo")
-	*success = false
+
+	time.Sleep(time.Duration(seconds) * time.Second)
 	// fmt.Print("server is crashed")
 	return errors.New("server is crashed")
 }
