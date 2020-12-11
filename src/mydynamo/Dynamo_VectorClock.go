@@ -19,19 +19,18 @@ func NewVectorClock() VectorClock {
 //Returns true if the other VectorClock is causally descended from this one
 func (s VectorClock) LessThan(otherClock VectorClock) bool {
 	// panic("todo")
-	// equal := false
+	equal := false
 	for k, v := range s.Clock {
 		if v > otherClock.Clock[k] {
 			return false
 		} else if v < otherClock.Clock[k] {
-			// equal = false
+			equal = false
 		}
 	}
-	// if !equal {
-	// 	return true
-	// }
-	// return false
-	return true
+	if !equal {
+		return true
+	}
+	return false
 }
 
 //Returns true if neither VectorClock is causally descended from the other

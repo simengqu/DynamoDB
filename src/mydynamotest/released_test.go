@@ -1,6 +1,7 @@
 package mydynamotest
 
 import (
+	"fmt"
 	"mydynamo"
 	"testing"
 	"time"
@@ -52,6 +53,7 @@ func TestGossip(t *testing.T) {
 		t.Logf("TestGossip: Failed to get")
 	}
 	gotValue := *gotValuePtr
+	fmt.Println(gotValue.EntryList)
 	if len(gotValue.EntryList) != 1 || !valuesEqual(gotValue.EntryList[0].Value, []byte("abcde")) {
 		t.Fail()
 		t.Logf("TestGossip: Failed to get value")
@@ -81,7 +83,7 @@ func TestMultipleKeys(t *testing.T) {
 	gotValue := *gotValuePtr
 	if len(gotValue.EntryList) != 1 || !valuesEqual(gotValue.EntryList[0].Value, []byte("abcde")) {
 		t.Fail()
-		t.Logf("TestMultipleKeys: Failed to get value")
+		t.Logf("TestMultipleKeys: Failed to get value1")
 	}
 
 	gotValuePtr = clientInstance1.Get("s1")
@@ -100,7 +102,7 @@ func TestMultipleKeys(t *testing.T) {
 	gotValue = *gotValuePtr
 	if len(gotValue.EntryList) != 1 || !valuesEqual(gotValue.EntryList[0].Value, []byte("efghi")) {
 		t.Fail()
-		t.Logf("TestMultipleKeys: Failed to get value")
+		t.Logf("TestMultipleKeys: Failed to get value2")
 	}
 }
 
